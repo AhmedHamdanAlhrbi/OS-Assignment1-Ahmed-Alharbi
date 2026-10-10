@@ -30,6 +30,9 @@ class Process implements Runnable {
     private int timeQuantum; // Time slice (time quantum) allowed per CPU access (in milliseconds)
     private int remainingTime; // Time left for the process to finish its execution
     private final int priority; // Display-only priority; Round-Robin order remains FIFO
+    private final long createdAtMillis; // Time this simulated process was created
+    private long waitingTimeMillis; // Accumulated time spent in the ready queue
+    private long waitingStartedAtMillis; // Start of the current ready-queue wait
 
     // Constructor to initialize the process with name, burst time, and time quantum
     public Process(String name, int burstTime, int timeQuantum, int priority) {
@@ -38,6 +41,24 @@ class Process implements Runnable {
         this.timeQuantum = timeQuantum;
         this.remainingTime = burstTime; // Initially, remaining time is equal to the burst time
         this.priority = priority;
+        this.createdAtMillis = System.currentTimeMillis();
+        this.waitingTimeMillis = 0;
+        this.waitingStartedAtMillis = createdAtMillis;
+    }
+
+    // Account for time in the ready queue whenever the scheduler dispatches this process.
+    public void markStarted() {
+        if (waitingStartedAtMillis >= 0) {
+            waitingTimeMillis += System.currentTimeMillis() - waitingStartedAtMillis;
+            waitingStartedAtMillis = -1;
+        }
+    }
+
+    // Begin a new waiting interval when this process enters the ready queue.
+    public void markReady() {
+        if (waitingStartedAtMillis < 0) {
+            waitingStartedAtMillis = System.currentTimeMillis();
+        }
     }
 
     // This method will be called when the thread for this process is started
@@ -143,6 +164,14 @@ class Process implements Runnable {
         return priority;
     }
 
+    public long getWaitingTimeMillis() {
+        return waitingTimeMillis;
+    }
+
+    public long getCreatedAtMillis() {
+        return createdAtMillis;
+    }
+
     // Check if the process has finished (i.e., no remaining time)
     public boolean isFinished() {
         return remainingTime <= 0;
@@ -159,7 +188,9 @@ public class SchedulerSimulation {
             contextSwitchCount++;
         }
         lastRunningProcessName = process.getName();
+        process.markStarted();
     }
+
     public static void main(String[] args) {
         // ⚠️ IMPORTANT: Put your student ID here to seed the random number generator
         // This makes your output unique to you - DO NOT forget to change this!
@@ -296,6 +327,27 @@ public class SchedulerSimulation {
         System.out.println(Colors.BOLD + Colors.BRIGHT_GREEN + 
                           "╚════════════════════════════════════════════════════════════════════════════════╝" + 
                           Colors.RESET + "\n");
+
+        printProcessSummary(processMap);
+    }
+
+    // Show the requested scheduling metrics after every process has completed.
+    private static void printProcessSummary(Map<Thread, Process> processMap) {
+        System.out.println("\nProcess Scheduling Summary");
+        System.out.printf("%-12s %-14s %-16s %-18s%n", "Process", "Burst (ms)", "Waiting (ms)", "Turnaround (ms)");
+        System.out.println("----------------------------------------------------------------");
+
+        // Several Thread keys may refer to the same Process after it is re-enqueued.
+        Map<String, Process> uniqueProcesses = new java.util.LinkedHashMap<>();
+        for (Process process : processMap.values()) {
+            uniqueProcesses.put(process.getName(), process);
+        }
+        for (Process process : uniqueProcesses.values()) {
+            long waiting = process.getWaitingTimeMillis();
+            long turnaround = waiting + process.getBurstTime();
+            System.out.printf("%-12s %-14d %-16d %-18d%n", process.getName(), process.getBurstTime(), waiting, turnaround);
+        }
+
         System.out.println("Total context switches: " + contextSwitchCount);
     }
     
@@ -311,7 +363,8 @@ public class SchedulerSimulation {
         // Map the thread to the process, so we can track the process associated with each thread
         processMap.put(thread, process);
         
-        // Print a message indicating the process has entered the ready queue
+        // Print a message indicating the process has entereda the ready queue
+        process.markReady();
         System.out.println(Colors.BLUE + "  ➕ " + Colors.BOLD + Colors.CYAN + process.getName() + 
                           " (Priority: " + process.getPriority() + ")" +
                           Colors.RESET + Colors.BLUE + " added to ready queue" + Colors.RESET + 
