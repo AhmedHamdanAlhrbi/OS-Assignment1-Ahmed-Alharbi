@@ -150,6 +150,16 @@ class Process implements Runnable {
 }
 
 public class SchedulerSimulation {
+    // Counts changes from one process to a different process (the initial dispatch is not a switch).
+    private static int contextSwitchCount = 0;
+    private static String lastRunningProcessName = null;
+
+    private static void recordProcessStart(Process process) {
+        if (lastRunningProcessName != null && !lastRunningProcessName.equals(process.getName())) {
+            contextSwitchCount++;
+        }
+        lastRunningProcessName = process.getName();
+    }
     public static void main(String[] args) {
         // ⚠️ IMPORTANT: Put your student ID here to seed the random number generator
         // This makes your output unique to you - DO NOT forget to change this!
@@ -244,6 +254,8 @@ public class SchedulerSimulation {
             System.out.println(Colors.BOLD + Colors.MAGENTA + "└" + "─".repeat(79) + Colors.RESET + "\n");
             
             // Start the thread, which will run the process for one time quantum
+            Process scheduledProcess = processMap.get(currentThread);
+            recordProcessStart(scheduledProcess);
             currentThread.start();
             
             try {
@@ -267,6 +279,7 @@ public class SchedulerSimulation {
                     System.out.println(Colors.BRIGHT_YELLOW + "  ⚠ " + Colors.CYAN + process.getName() + 
                                       Colors.RESET + Colors.YELLOW + " is the last process → running to completion" + 
                                       Colors.RESET);
+                    recordProcessStart(process);
                     process.runToCompletion(); // Run until the process completes
                 }
             }
@@ -283,6 +296,7 @@ public class SchedulerSimulation {
         System.out.println(Colors.BOLD + Colors.BRIGHT_GREEN + 
                           "╚════════════════════════════════════════════════════════════════════════════════╝" + 
                           Colors.RESET + "\n");
+        System.out.println("Total context switches: " + contextSwitchCount);
     }
     
     // Method to add a process to the queue and map, while printing a "ready" message
